@@ -1,59 +1,71 @@
-import fs from "fs/promises";
-import path from "path";
-import { nanoid } from "nanoid";
-
-const contactsPath = path.join(process.cwd(), "db", "contacts.json");
+import Contact from "../models/contactsModel.js";
 
 async function listContacts() {
-  try {
-    const data = await fs.readFile(contactsPath, "utf-8");
-    return JSON.parse(data);
-  } catch (error) {
-    console.error("Error reading contacts file:", error);
-    throw new Error("Unable to read contacts data.");
-  }
+  return await Contact.findAll();
 }
 
 async function getContactById(contactId) {
-  const contacts = await listContacts();
-  return contacts.find((contact) => contact.id === contactId) || null;
+  const contact = await Contact.findByPk(contactId);
+  console.log(`Found contact with ID ${contactId}:`, contact);
+  return contact;
 }
+
+async function addContact(name, email, phone) {
+  return await Contact.create({ name, email, phone });
+}
+
+const updateContact = async (contactId, data) => {
+  const contact = await Contact.findByPk(contactId);
+  if (!contact) return null;
+  return await contact.update(data);
+};
+
+const updateStatusContact = async (contactId, data) => {
+  const contact = await Contact.findByPk(contactId);
+
+  if (!contact) {
+    console.log(`Contact with ID ${contactId} not found`);
+    return null;
+  }
+
+  if (contact.favorite === true && data.favorite === true) {
+    console.log(`Contact ${contactId} is already added to favorites`);
+    return contact;
+  }
+
+  if (contact.favorite === true && data.favorite === false) {
+    const updatedContact = await contact.update({ favorite: data.favorite });
+
+    console.log(
+      `Contact ${contactId} favorite status updated to: ${updatedContact.favorite}`
+    );
+
+    return updatedContact;
+  }
+
+  if (contact.favorite === false && data.favorite === true) {
+    const updatedContact = await contact.update({ favorite: data.favorite });
+
+    console.log(
+      `Contact ${contactId} favorite status updated to: ${updatedContact.favorite}`
+    );
+
+    return updatedContact;
+  }
+};
 
 async function removeContact(contactId) {
-  const contacts = await listContacts();
-  const index = contacts.findIndex((contact) => contact.id === contactId);
-  if (index === -1) return null;
-
-  const [removedContact] = contacts.splice(index, 1);
-  await fs.writeFile(contactsPath, JSON.stringify(contacts, null, 2));
-  return removedContact;
+  const contact = await Contact.findByPk(contactId);
+  if (!contact) return null;
+  await contact.destroy();
+  return contact;
 }
 
-async function addContact(contactData) {
-  const contacts = await listContacts();
-  const newContact = { id: nanoid(), ...contactData };
-  contacts.push(newContact);
-  await fs.writeFile(contactsPath, JSON.stringify(contacts, null, 2));
-  return newContact;
-}
-
-async function updateContactInService(contactId, updatedData) {
-  const contacts = await listContacts();
-  const contactIndex = contacts.findIndex(
-    (contact) => contact.id === contactId
-  );
-
-  if (contactIndex === -1) return null;
-
-  contacts[contactIndex] = { ...contacts[contactIndex], ...updatedData };
-  await fs.writeFile(contactsPath, JSON.stringify(contacts, null, 2));
-  return contacts[contactIndex];
-}
-
-export {
+export default {
   listContacts,
   getContactById,
-  removeContact,
   addContact,
-  updateContactInService,
+  updateContact,
+  updateStatusContact,
+  removeContact,
 };
