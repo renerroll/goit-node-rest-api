@@ -1,52 +1,101 @@
-import User from "../models/contactsUser.js";
+import { UniqueConstraintError } from "sequelize";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import gravatar from "gravatar";
+import * as path from "node:path";
+import * as fs from "node:fs/promises";
 
-async function registerUser(email, password) {
-  const user = await User.create({ email, password });
-  console.log(`Created user with email ${email}:`, user);
-  return user;
-}
+import User from "../db/models/User.js";
+import HttpError from "../helpers/HttpError.js";
 
-async function getUser(email) {
-  try {
+
+const avatarsDir = path.join("public", "avatars");
+
+const register = async ({ email, password }) => {
+    try {
+        const hashPassword = bcrypt.hashSync(password, 10);
+        const avatarURL = gravatar.url(email, { protocol: 'https' })
+
+        return await User.create({
+            email,
+            password: hashPassword,
+            avatarURL: avatarURL,
+            subscription: "starter",
+        });
+    } catch (error) {
+        if (error instanceof UniqueConstraintError) {
+            throw HttpError(409, "Email in use")
+        }
+
+        throw error;
+    }
+};
+
+const login = async ({ email, password }) => {
     const user = await User.findOne({ where: { email } });
-    if (!user) {
-      throw new Error(`User with email ${email} not found`);
-    }
-    console.log(`Found user with email ${email}:`, user);
-    return user;
-  } catch (error) {
-    console.error(error.message);
-    throw error;
-  }
-}
 
-async function getUserById(userId) {
-  try {
+    if (!user) {
+        throw HttpError(401, "Email or password is wrong");
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+        throw HttpError(401, "Email or password is wrong");
+    }
+
+    const payload = {
+        id: user.id,
+        email: user.email,
+    };
+
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1h" });
+    user.token = token;
+
+    await user.save();
+
+    return {
+        email: user.email,
+        subscription: user.subscription,
+        token,
+    };
+};
+
+const logout = async (userId) => {
     const user = await User.findByPk(userId);
+
     if (!user) {
-      throw new Error(`User with ID ${userId} not found`);
+        throw HttpError(401, "Not authorized");
     }
-    console.log(`Found user with ID ${userId}:`, user);
-    return user;
-  } catch (error) {
-    console.error(error.message);
-    throw error;
-  }
-}
 
-async function updateUserToken(userId, token) {
-  const user = await User.update({ token }, { where: { id: userId } });
-  return user;
-}
+    user.token = null;
+    await user.save();
+};
 
-async function updateUserAvatar(userId, avatarURL) {
-  return await User.update({ avatarURL }, { where: { id: userId } });
+const updateAvatar = async (userId, file) => {
+    if (!file) {
+        throw HttpError(400, "Field 'avatar' is required");
+    }
+
+    const { path: oldPath, filename } = file;
+    const newPath = path.join(avatarsDir, filename);
+
+    await fs.rename(oldPath, newPath);
+    const avatarURL = path.join("avatars", filename);
+
+    const user = await User.findOne({ where: { id: userId } });
+
+    if (!user) return null;
+
+    return user.update(
+        { avatarURL: `${process.env.HOST}:${process.env.PORT}/${avatarURL}` },
+        { returning: true }
+    );
 }
 
 export default {
-  registerUser,
-  getUser,
-  getUserById,
-  updateUserToken,
-  updateUserAvatar,
+    register,
+    login,
+    logout,
+    updateAvatar,
 };
