@@ -1,176 +1,92 @@
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
-import User from "../models/User.js";
+import errorWrapper from "../helpers/errorWrapper.js";
 import authService from "../services/authServices.js";
 import HttpError from "../helpers/HttpError.js";
-import dotenv from "dotenv";
-import gravatar from "gravatar";
-import path from "node:path";
-import fs from "node:fs/promises";
-import { Jimp } from "jimp";
-import { nanoid } from "nanoid";
-import sendVerificationEmail from "../helpers/emailService.js";
 
-dotenv.config();
-const { SECRET_KEY } = process.env;
+const register = async (req, res) => {
+    const newUser = await authService.register(req.body);
 
-const avatarsDir = path.resolve("public/avatars");
-export const registerNewUser = async (req, res, next) => {
-  try {
-    const { email, password, subscription = "starter" } = req.body;
-
-    const existingUser = await User.findOne({ where: { email } });
-    if (existingUser) {
-      throw HttpError(409, "Email in use");
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const avatarURL = await gravatar.url(email, { s: "250", d: "retro" }, true);
-    const verificationToken = nanoid();
-    const newUser = await authService.registerUser(
-      email,
-      hashedPassword,
-      avatarURL,
-      verificationToken
-    );
-
-    await sendVerificationEmail(email, verificationToken);
-
-    return res.status(201).json({
+    res.status(201).send({
       user: {
-        email: newUser.email,
-        subscription: newUser.subscription,
-        avatarURL: newUser.avatarURL,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
+          email: newUser.email,
+          subscription: newUser.subscription,
+          avatar: newUser.avatar,
+      }
+    })
+}
+
+const login = async (req, res) => {
+    const user = await authService.login(req.body);
+
+    res.status(200).send({
+        token: user.token,
+        user: {
+            email: user.email,
+            subscription: user.subscription,
+        }
+    })
+}
+
+const logout = async (req, res) => {
+    await authService.logout(req.user.id);
+
+    res.status(204).send();
 };
 
-export const loginUser = async (req, res, next) => {
-  try {
-    const { email, password } = req.body;
+const getCurrentUser = async (req, res) => {
+    const user = req.user;
 
-    const user = await authService.getUser(email);
-
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      throw HttpError(401, "Email or password is wrong");
+    if (!user) {
+        throw HttpError(401, "Not authorized");
     }
 
-    const payload = { id: user.id };
-    const token = jwt.sign(payload, SECRET_KEY, { expiresIn: "1h" });
-
-    const result = await authService.updateUserToken(user.id, token);
-
-    return res.status(200).json({
-      token,
-      user: {
+    res.status(200).json({
         email: user.email,
         subscription: user.subscription,
-      },
     });
-  } catch (error) {
-    next(error);
-  }
 };
 
-export const logoutUser = async (req, res, next) => {
-  try {
-    const { id } = req.user;
-
-    const user = await authService.getUserById(id);
-    if (!user) {
-      throw HttpError(401, "Not authorized");
-    }
-
-    await authService.updateUserToken(id, null);
-
-    return res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const getCurrentUser = async (req, res, next) => {
-  try {
-    const { id, email, subscription } = req.user;
-    const user = await authService.getUserById(id);
+const updateAvatar = async (req, res) => {
+    const user = req.user;
 
     if (!user) {
-      throw HttpError(401, "Not authorized");
+        throw HttpError(401, "Not authorized");
     }
 
-    return res.status(200).json({ email, subscription });
-  } catch (error) {
-    next(error);
-  }
-};
+    const updatedUser = await authService.updateAvatar(req.user.id, req.file);
 
-export const updateAvatar = async (req, res) => {
-  if (!req.file) {
-    throw HttpError(400, "No file uploaded");
-  }
+    if (!updatedUser) throw HttpError(404, "Not found");
 
-  const { path: tempPath, filename } = req.file;
-  const avatarName = `${req.user.id}-${Date.now()}${path.extname(filename)}`;
-  const avatarPath = path.join(avatarsDir, avatarName);
+    res.status(200).json({
+        avatarURL: updatedUser.avatarURL,
+    })
+}
 
-  await fs.rename(tempPath, avatarPath);
-  const avatarURL = `/avatars/${avatarName}`;
-  await authService.updateUserAvatar(req.user.id, avatarURL);
+const verificationToken = async (req, res) => {
+    const user = await authService.verificationToken(req.params.verificationToken);
 
-  res.json({ avatarURL });
-};
+    if (!user) throw HttpError(404, "Not found");
 
-export const verifyUser = async (req, res, next) => {
-  try {
-    const { verificationToken } = req.params;
+    res.status(200).send({
+        message: 'Verification successful',
+    })
+}
 
-    const user = await User.findOne({ where: { verificationToken } });
-    if (!user) {
-      throw HttpError(404, "User not found");
-    }
+const verify = async (req, res) => {
+    const user = await authService.verify(req.body.email);
 
-    user.verify = true;
-    user.verificationToken = null;
-    await user.save();
+    if (!user) throw HttpError(400, "Verification has already been passed");
 
-    return res.status(200).json({
-      message: "Verification successful",
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+    res.status(200).send({
+        message: 'Verification email sent',
+    })
+}
 
-export const resendVerify = async (req, res, next) => {
-  try {
-    const { email } = req.body;
-
-    if (!email) {
-      throw HttpError(400, "missing required field email");
-    }
-
-    const user = await User.findOne({ where: { email } });
-    if (!user) {
-      throw HttpError(404, "User not found");
-    }
-
-    if (user.verify) {
-      throw HttpError(400, "Verification has already been passed");
-    }
-
-    const verificationToken = nanoid();
-    user.verificationToken = verificationToken;
-    await user.save();
-
-    await sendVerificationEmail(email, verificationToken);
-
-    return res.status(200).json({
-      message: "Verification email sent",
-    });
-  } catch (error) {
-    next(error);
-  }
+export default {
+    register: errorWrapper(register),
+    login: errorWrapper(login),
+    logout: errorWrapper(logout),
+    getCurrentUser: errorWrapper(getCurrentUser),
+    updateAvatar: errorWrapper(updateAvatar),
+    verificationToken: errorWrapper(verificationToken),
+    verify: errorWrapper(verify),
 };

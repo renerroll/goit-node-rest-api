@@ -1,34 +1,34 @@
 import express from "express";
-import {
-  registerNewUser,
-  loginUser,
-  logoutUser,
-  getCurrentUser,
-  updateAvatar,
-  resendVerify,
-  verifyUser,
-} from "../controllers/authControllers.js";
 
-import { authSchema } from "../schemas/authSchemas.js";
-import { varifySchema } from "../schemas/authSchemas.js";
+import authController from "../controllers/authControllers.js";
 import validateBody from "../helpers/validateBody.js";
-import authMiddleware from "../middlewares/authMiddleware.js";
-import { upload } from "../middlewares/upload.js";
+import {createUserSchema, getUserSchema, verifyEmailSchema} from "../schemas/authSchema.js";
+
+import auth from "../middlewares/auth.js";
+import upload from "../middlewares/upload.js";
 
 const authRouter = express.Router();
 
-authRouter.post("/register", validateBody(authSchema), registerNewUser);
-authRouter.post("/login", validateBody(authSchema), loginUser);
-authRouter.post("/logout", authMiddleware, logoutUser);
-authRouter.get("/current", authMiddleware, getCurrentUser);
-authRouter.patch(
-  "/avatars",
-  authMiddleware,
-  upload.single("avatar"),
-  updateAvatar
+authRouter.post(
+    "/register",
+    validateBody(createUserSchema),
+    authController.register,
 );
-authRouter.get("/verify/:verificationToken", verifyUser);
 
-authRouter.post("/verify", validateBody(varifySchema), resendVerify);
+authRouter.post(
+    "/login",
+    validateBody(getUserSchema),
+    authController.login,
+);
+
+authRouter.post("/logout", auth, authController.logout);
+
+authRouter.get("/current", auth, authController.getCurrentUser);
+
+authRouter.patch("/avatars", upload.single("avatar"), auth, authController.updateAvatar);
+
+authRouter.get("/verify/:verificationToken", authController.verificationToken)
+
+authRouter.post("/verify", validateBody(verifyEmailSchema), authController.verify)
 
 export default authRouter;
