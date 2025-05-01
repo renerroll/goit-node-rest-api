@@ -1,48 +1,54 @@
-import express from "express";
+import express from 'express';
+
+import authenticate from '../middlewares/authenticate.js';
+
 import {
-  getAllContacts,
-  getOneContact,
-  deleteContact,
-  createContact,
-  updateContact,
-  updateStatusContact,
-} from "../controllers/contactsControllers.js";
-import authMiddleware from "../middlewares/authMiddleware.js";
-import validateBody from "../helpers/validateBody.js";
+  getContactsController,
+  getContactByIdController,
+  addContactController,
+  updateContactController,
+  deleteContactController,
+  updateStatusContactController,
+} from '../controllers/contactsControllers.js';
+
+import validateBody from '../decorators/validateBody.js';
+
 import {
   createContactSchema,
   updateContactSchema,
-} from "../schemas/contactsSchemas.js";
+  updateFavoriteSchema,
+} from '../schemas/contactsSchemas.js';
+
+import isEmptyBody from '../middlewares/isEmptyBody.js';
 
 const contactsRouter = express.Router();
 
-contactsRouter.use(authMiddleware);
+contactsRouter.use(authenticate);
 
-contactsRouter.get("/", getAllContacts);
-contactsRouter.get("/:id", getOneContact);
-contactsRouter.delete("/:id", deleteContact);
+contactsRouter.get('/', getContactsController);
+
+contactsRouter.get('/:id', getContactByIdController);
+
 contactsRouter.post(
-  "/",
+  '/',
+  isEmptyBody,
   validateBody(createContactSchema),
-  async (req, res, next) => {
-    try {
-      console.log("Request body before saving:", req.body);
-      console.log("User ID from middleware:", req.user?.id);
-
-      const newContact = await createContact(req, res, next);
-      res.status(201).json(newContact);
-    } catch (error) {
-      console.error("Error creating contact:", error);
-      next(error);
-    }
-  }
+  addContactController
 );
 
-contactsRouter.put("/:id", validateBody(updateContactSchema), updateContact);
-contactsRouter.patch(
-  "/:id/favorite",
+contactsRouter.put(
+  '/:id',
+  isEmptyBody,
   validateBody(updateContactSchema),
-  updateStatusContact
+  updateContactController
+);
+
+contactsRouter.delete('/:id', deleteContactController);
+
+contactsRouter.patch(
+  '/:id/favorite',
+  validateBody(updateFavoriteSchema),
+  updateStatusContactController
 );
 
 export default contactsRouter;

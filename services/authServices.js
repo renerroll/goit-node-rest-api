@@ -1,42 +1,69 @@
-import User from "../models/User.js";
+import bcrypt from 'bcrypt';
 
-async function registerUser(email, password) {
-  const user = await User.create({ email, password });
-  console.log(`Created user with email ${email}:`, user);
-  return user;
-}
+import User from '../db/models/User.js';
 
-async function getUser(email) {
-  try {
-    const user = await User.findOne({ where: { email } });
-    if (!user) {
-      throw new Error(`User with email ${email} not found`);
-    }
-    console.log(`Found user with email ${email}:`, user);
-    return user;
-  } catch (error) {
-    console.error(error.message);
-    throw error;
+import HttpError from '../helpers/HttpError.js';
+
+import { generateToken } from '../helpers/jwt.js';
+
+export const findUser = query =>
+  User.findOne({
+    where: query,
+  });
+
+export const registerUser = async data => {
+  const { email, password } = data;
+
+  const user = await User.findOne({
+    where: {
+      email,
+    },
+  });
+
+  if (user) {
+    throw HttpError(409, 'Email already in use');
   }
-}
 
-async function getUserById(userId) {
-  try {
-    const user = await User.findByPk(userId);
-    if (!user) {
-      throw new Error(`User with ID ${userId} not found`);
-    }
-    console.log(`Found user with ID ${userId}:`, user);
-    return user;
-  } catch (error) {
-    console.error(error.message);
-    throw error;
+  const hashPassword = await bcrypt.hash(password, 10);
+
+  return User.create({ ...data, password: hashPassword });
+};
+
+export const loginUser = async data => {
+  const { email, password } = data;
+
+  const user = await User.findOne({
+    where: {
+      email,
+    },
+  });
+
+  if (!user) {
+    throw HttpError(401, 'Email or password invalid');
   }
-}
 
-async function updateUserToken(userId, token) {
-  const user = await User.update({ token }, { where: { id: userId } });
-  return user;
-}
+  const passwordCompare = await bcrypt.compare(password, user.password);
 
-export default { registerUser, getUser, getUserById, updateUserToken };
+  if (!passwordCompare) {
+    throw HttpError(401, 'Email or password invalid');
+  }
+
+  const payload = {
+    email,
+  };
+
+  const token = generateToken(payload);
+
+  await user.update({ token });
+
+  return { token };
+};
+
+export const logoutUser = async id => {
+  const user = await findUser({ id });
+  if (!user || !user.token) {
+    throw HttpError(404, 'User not found');
+  }
+
+  await user.update({ token: null });
+};

@@ -1,5 +1,5 @@
-import { Sequelize } from "sequelize";
-import dotenv from "dotenv";
+import { Sequelize } from 'sequelize';
+import dotenv from 'dotenv';
 
 dotenv.config();
 
@@ -11,21 +11,21 @@ const sequelize = new Sequelize({
   database: process.env.DATABASE_NAME,
   port: process.env.DATABASE_PORT,
   dialectOptions: {
-    ssl: true,
+    ssl: {
+      require: true,
+      rejectUnauthorized: false,
+    },
   },
 });
 
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
-    await sequelize.sync();
-    console.log("Database connection successful");
+    console.log('✅ Database connection successful');
   } catch (error) {
-    console.error("Database connection error:", error);
+    console.error(`❌ Error connection to database: ${error.message}`);
     process.exit(1);
   }
 };
 
-connectDB();
-
-export default sequelize;
+export { sequelize, connectDB };
