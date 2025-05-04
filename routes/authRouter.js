@@ -1,34 +1,56 @@
 import express from "express";
-
-import authController from "../controllers/authControllers.js";
 import validateBody from "../helpers/validateBody.js";
-import {createUserSchema, getUserSchema, verifyEmailSchema} from "../schemas/authSchema.js";
-
-import auth from "../middlewares/auth.js";
+import {
+  registerSchema,
+  resendVerifyEmailSchema,
+  loginSchema,
+} from "../schemas/authSchemas.js";
+import { updateSubscriptionSchema } from "../schemas/userSchemas.js";
+import {
+  register,
+  verifyEmail,
+  resendVerifyEmail,
+  login,
+  getCurrent,
+  logout,
+} from "../controllers/authControllers.js";
+import {
+  updateSubscription,
+  updateAvatar,
+} from "../controllers/userControllers.js";
+import authenticate from "../middlewares/authenticate.js";
 import upload from "../middlewares/upload.js";
 
 const authRouter = express.Router();
 
-authRouter.post(
-    "/register",
-    validateBody(createUserSchema),
-    authController.register,
-);
+authRouter.post("/register", validateBody(registerSchema), register);
+
+authRouter.get("/verify/:verificationToken", verifyEmail);
 
 authRouter.post(
-    "/login",
-    validateBody(getUserSchema),
-    authController.login,
+  "/verify",
+  validateBody(resendVerifyEmailSchema),
+  resendVerifyEmail
 );
 
-authRouter.post("/logout", auth, authController.logout);
+authRouter.post("/login", validateBody(loginSchema), login);
 
-authRouter.get("/current", auth, authController.getCurrentUser);
+authRouter.get("/current", authenticate, getCurrent);
 
-authRouter.patch("/avatars", upload.single("avatar"), auth, authController.updateAvatar);
+authRouter.patch(
+  "/subscription",
+  authenticate,
+  validateBody(updateSubscriptionSchema),
+  updateSubscription
+);
 
-authRouter.get("/verify/:verificationToken", authController.verificationToken)
+authRouter.patch(
+  "/avatars",
+  authenticate,
+  upload.single("avatar"),
+  updateAvatar
+);
 
-authRouter.post("/verify", validateBody(verifyEmailSchema), authController.verify)
+authRouter.post("/logout", authenticate, logout);
 
 export default authRouter;

@@ -1,44 +1,47 @@
-import Contact from "../db/models/Contact.js";
+import { Contact } from "../models/contact.js";
 
-const listContacts = (ownerId) => {
-  return Contact.findAll({ where: { owner: ownerId } });
-};
+export async function listContacts({ skip = 0, limit = 20, favorite, owner }) {
+  const where = { owner };
 
-const getContactById = (id) => {
-  return Contact.findByPk(id);
-};
+  if (favorite !== undefined) {
+    where.favorite = favorite === "true";
+  }
 
-const addContact = (data) => {
-  return Contact.create(data);
-};
+  return await Contact.findAll({
+    where,
+    offset: skip,
+    limit: parseInt(limit),
+  });
+}
 
-const updateContact = async (contactId, { name, email, phone }, ownerId) => {
-  const contact = await Contact.findOne({ where: { id: contactId, owner: ownerId } });
-  if (!contact) return null;
+export async function getContactById(contactId) {
+  return await Contact.findByPk(contactId);
+}
 
-  return contact.update({ name, email, phone }, { returning: true });
-};
+export async function addContact(name, email, phone, owner) {
+  return await Contact.create({ name, email, phone, owner });
+}
 
-const removeContact = async (contactId, ownerId) => {
-  const contact = await Contact.findOne({ where: { id: contactId, owner: ownerId } });
+export async function removeContact(contactId) {
+  const contact = await getContactById(contactId);
+
   if (!contact) return null;
 
   await contact.destroy();
-  return contact.toJSON();
-};
 
-const updateStatusContact = async (contactId, favorite, ownerId) => {
-  const contact = await Contact.findOne({ where: { id: contactId, owner: ownerId } });
+  return contact;
+}
+
+export async function updateContact(contactId, updates) {
+  const contact = await getContactById(contactId);
+
   if (!contact) return null;
 
-  return contact.update({ favorite }, { returning: true });
-};
+  await contact.update(updates);
+  
+  return contact;
+}
 
-export default {
-  listContacts,
-  getContactById,
-  removeContact,
-  addContact,
-  updateContact,
-  updateStatusContact,
-};
+export async function updateStatusContact(contactId, updates) {
+  return await updateContact(contactId, updates);
+}

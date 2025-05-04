@@ -1,15 +1,15 @@
 import Joi from "joi";
 
-import { emailRegexp } from "../constants/auth.js";
+export const registerSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().min(6).required(),
+});
 
-const baseAuthSchema = {
-    email: Joi.string().pattern(emailRegexp).required(),
-    password: Joi.string().min(6).required(),
-};
+export const resendVerifyEmailSchema = Joi.object({
+  email: Joi.string().email().required(),
+});
 
-export const createUserSchema = Joi.object(baseAuthSchema);
-export const getUserSchema = Joi.object(baseAuthSchema);
-
-export const verifyEmailSchema = Joi.object({
-    email: Joi.string().pattern(emailRegexp).required(),
+export const loginSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().required(),
 });
